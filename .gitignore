@@ -1,0 +1,10 @@
+﻿# Simulation binaries & temp files
+sim/
+sim_*
+*.vvp
+*.log
+__pycache__/
+*.pyc
+
+# Keep wave dumps
+!waves/*.vcd

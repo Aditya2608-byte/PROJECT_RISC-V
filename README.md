@@ -1,0 +1,321 @@
+﻿# 🚀 RISC-V Based AI Accelerator SoC
+### Synthesizable SystemVerilog 4x4 Systolic Array Hardware Engine & Verification
+
+![SystemVerilog](https://img.shields.io/badge/Language-SystemVerilog%20%7C%20Python-blue?style=for-the-badge&logo=verilog)
+![Target Architecture](https://img.shields.io/badge/Architecture-RISC--V%20RV32IM%20SoC-red?style=for-the-badge&logo=riscv)
+![Verification](https://img.shields.io/badge/Verification-100%25%20Passing-brightgreen?style=for-the-badge)
+![Speedup](https://img.shields.io/badge/Performance-105.6x%20vs%20Scalar%20CPU-orange?style=for-the-badge)
+![Status](https://img.shields.io/badge/Milestone%201-Phase%201%20Complete-success?style=for-the-badge)
+
+---
+
+## 📌 1. Project Overview & Motivation
+
+Matrix multiplication ($C = A \times B$) forms the fundamental computational backbone of modern Deep Learning, Convolutional Neural Networks (CNNs), and Transformer models. When executed on standard general-purpose scalar CPUs, dense matrix operations suffer from severe **Von Neumann memory bottlenecks**, instruction decoding overhead, and serial execution latency.
+
+This repository implements a **high-throughput, energy-efficient, synthesizable AI Accelerator Engine** written in **SystemVerilog (IEEE 1800-2012)**. Designed as a hardware coprocessor for a **RISC-V (RV32IM) SoC**, it features:
+* **Spatial Parallelism:** 16 parallel Processing Elements (PEs) executing 16 Multiply-Accumulate (MAC) operations per clock cycle.
+* **Mixed Precision Arithmetic:** Signed INT8 operands with full 32-bit signed accumulation to prevent overflow.
+* **On-Chip Hardware Activation:** 16-channel parallel Rectified Linear Unit (ReLU) evaluation.
+* **Deterministic Execution:** Fixed **8 clock-cycle latency** per $4 \times 4$ matrix tile ($105.6\times$ faster than a scalar RISC-V core).
+* **SoC Memory-Mapped CSR Abstraction:** Pre-wired register file interface (`0x4000_0000` base address) ready for standard bus attachment (AXI4-Lite / APB).
+
+---
+
+## 🏛️ 2. High-Level Architectural Diagram
+
+```
+                                  AI ACCELERATOR ENGINE (4x4)
++-----------------------------------------------------------------------------------------+
+|                                                                                         |
+|   [Matrix A (INT8)]   [Matrix B (INT8)]       [Start] [Act_En] [rst_n] [clk]            |
+|          |                   |                   |       |      |       |               |
+|          v                   v                   v       v      v       v               |
+|     +---------+         +---------+         +-------------------------------+           |
+|     |  A_REG  |         |  B_REG  |         |        CONTROLLER FSM         |           |
+|     +---------+         +---------+         | (IDLE->LOAD->COMPUTE->ACT->WB)|           |
+|          |                   |              +-------------------------------+           |
+|          +---------+---------+                              |                           |
+|                    | (step_k: 0..3)                         | control signals           |
+|                    v                                        v (clear, enable)           |
+|     +---------------------------------------------------------------+                   |
+|     |                4x4 SPATIAL PROCESSING ARRAY                   |                   |
+|     |        PE[0,0]      PE[0,1]      PE[0,2]      PE[0,3]         |                   |
+|     |        PE[1,0]      PE[1,1]      PE[1,2]      PE[1,3]         |                   |
+|     |        PE[2,0]      PE[2,1]      PE[2,2]      PE[2,3]         |                   |
+|     |        PE[3,0]      PE[3,1]      PE[3,2]      PE[3,3]         |                   |
+|     +---------------------------------------------------------------+                   |
+|                                    |                                                    |
+|                                    | 16 x Signed INT32 raw dot-products                 |
+|                                    v                                                    |
+|     +---------------------------------------------------------------+                   |
+|     |                  16-CHANNEL ReLU ACTIVATION                   |                   |
+|     |                  C_act[i,j] = max(0, C[i,j])                  |                   |
+|     +---------------------------------------------------------------+                   |
+|                                    |                                                    |
+|                                    v                                                    |
+|     +---------------------------------------------------------------+                   |
+|     |                  INT32 RESULT ACCUMULATOR                     |                   |
+|     |                     (4x4 Matrix Store)                        |                   |
+|     +---------------------------------------------------------------+                   |
+|                                    |                                                    |
+|                                    v                                                    |
+|                         [Matrix C Output (INT32)]                                       |
+|                         [busy, done, error flags]                                       |
+|                                                                                         |
++-----------------------------------------------------------------------------------------+
+```
+
+---
+
+## ⚡ 3. Performance Benchmark: AI Accelerator vs. RISC-V CPU
+
+To quantify the hardware advantage, the accelerator was benchmarked against a standard **RISC-V (RV32IM) scalar core** executing equivalent optimized matrix multiplication with ReLU at **100 MHz (10 ns clock period)**:
+
+```
+================================================================================
+      PERFORMANCE BENCHMARK: RISC-V CPU vs. AI ACCELERATOR HARDWARE
+================================================================================
+Matrix Size  | Total MACs | RISC-V CPU (Cycles/Time)   | AI Accelerator (Cycles/Time)   | Speedup
+--------------------------------------------------------------------------------
+4x4          | 64         | 845 cycles (8.45 us)       | 8 cycles (0.08 us)             | 105.6x FASTER
+8x8          | 512        | 6,169 cycles (61.69 us)    | 64 cycles (0.64 us)            | 96.4x FASTER
+16x16        | 4,096      | 47,153 cycles (471.53 us)  | 512 cycles (5.12 us)           | 92.1x FASTER
+32x32        | 32,768     | 368,737 cycles (3.68 ms)   | 4,096 cycles (40.96 us)        | 90.0x FASTER
+64x64 (DNN)  | 262,144    | 2,916,545 cycles (29.16 ms)| 32,768 cycles (0.32 ms)        | 89.0x FASTER
+================================================================================
+```
+
+### Detailed Metric Comparison for Single $4 \times 4$ Matrix Multiply:
+* **RISC-V CPU:** 573 instructions executed, **845 clock cycles**, $8.45\ \mu\text{s}$ latency, **$0.076\text{ MACs/cycle}$**.
+* **AI Accelerator:** 0 instruction overhead, **8 clock cycles**, $0.080\ \mu\text{s}$ latency, **$8.00\text{ MACs/cycle}$** (Peak: $16.0\text{ MACs/cycle}$).
+* **Net Advantage:** **$105.6\times$ Speedup** and **$99.1\%$ execution time reduction**!
+
+---
+
+## 📐 4. Mathematical Specification & Precision
+
+For two input matrices $A \in \mathbb{Z}^{4 \times 4}$ and $B \in \mathbb{Z}^{4 \times 4}$:
+
+$$C[i][j] = \sum_{k=0}^{3} A[i][k] \times B[k][j], \quad \forall i, j \in \{0, 1, 2, 3\}$$
+
+$$\text{Final Output } C[i][j] = 
+\begin{cases} 
+\max(0, C[i][j]) & \text{if } \text{activation\_enable} = 1 \text{ (ReLU)} \\ 
+C[i][j] & \text{if } \text{activation\_enable} = 0 \text{ (Linear / Bypass)} 
+\end{cases}$$
+
+### Precision Details:
+* **Inputs ($A, B$):** Signed 8-bit integers ($-128$ to $+127$).
+* **Multiplication Product:** Signed 16-bit intermediate ($-16,256$ to $+16,384$).
+* **Accumulator ($C$):** Signed 32-bit register ($-2,147,483,648$ to $+2,147,483,647$), guaranteeing zero arithmetic overflow across full inner-product accumulation.
+
+---
+
+## 🔄 5. Controller Finite State Machine (FSM)
+
+The hardware controller coordinates operand capture, execution steps, activation, and write-back deterministically:
+
+```
+   +----------+
+   |   IDLE   | <-------------------------+
+   +----------+                           |
+        | start == 1                      |
+        v                                 |
+   +----------+                           |
+   |   LOAD   | (1 Cycle: Latch matrices, clear MAC accumulators)
+   +----------+                           |
+        |                                 |
+        v                                 |
+   +----------+                           |
+   | COMPUTE  | (4 Cycles: k = 0, 1, 2, 3 -> 16 parallel MACs/cycle)
+   +----------+                           |
+        | k == 3                          |
+        v                                 |
+   +----------+                           |
+   | ACTIVATE | (1 Cycle: Parallel ReLU evaluation)
+   +----------+                           |
+        |                                 |
+        v                                 |
+   +----------+                           |
+   |WRITEBACK | (1 Cycle: Latch matrix into accumulator memory)
+   +----------+                           |
+        |                                 |
+        v                                 |
+   +----------+                           |
+   |   DONE   | (Assert done=1, busy=0) --+ (!start)
+   +----------+
+```
+
+---
+
+## 🗄️ 6. Memory-Mapped Control & Status Registers (CSR)
+
+The design implements a 32-bit register abstraction interface for future RISC-V interconnect integration:
+
+| Register Name | Offset Address | Access | Bitfield Description |
+| :--- | :--- | :--- | :--- |
+| **`REG_CTRL`** | `32'h4000_0000` | R/W | `[0]`: START (Write 1 to trigger computation) |
+| **`REG_STATUS`** | `32'h4000_0004` | RO | `[0]`: DONE, `[1]`: BUSY, `[2]`: ERROR |
+| **`REG_CFG_SIZE`** | `32'h4000_0008` | RO | `[31:0]`: Matrix dimension size ($N=4$) |
+| **`REG_CFG_K`** | `32'h4000_000C` | RO | `[31:0]`: Inner dimension ($K=4$) |
+| **`REG_ADDR_A`** | `32'h4000_0010` | R/W | `[31:0]`: Source base address for Matrix A |
+| **`REG_ADDR_B`** | `32'h4000_0014` | R/W | `[31:0]`: Source base address for Matrix B |
+| **`REG_ADDR_C`** | `32'h4000_0018` | R/W | `[31:0]`: Destination base address for Matrix C |
+| **`REG_CFG_ACT`** | `32'h4000_001C` | R/W | `[0]`: 0 = Linear/Bypass, 1 = ReLU Activation |
+
+---
+
+## 📁 7. Repository Structure & File Hierarchy
+
+```
+PROJECT_RISC-V/
+├── Makefile                          # Build automation (iverilog/vvp/python/gtkwave)
+├── README.md                         # Project documentation and specifications
+├── rtl/                              # Synthesizable SystemVerilog RTL
+│   └── accelerator/
+│       ├── accelerator_pkg.sv        # Package with widths, FSM enums, and CSR map
+│       ├── mac.sv                    # Signed INT8xINT8 multiplier with INT32 accumulator
+│       ├── pe.sv                     # Processing Element wrapper module
+│       ├── systolic_array.sv         # 4x4 spatial array (16 PEs)
+│       ├── relu.sv                   # Combinational ReLU activation unit
+│       ├── accumulator.sv            # 4x4 INT32 matrix store with parallel/indexed R/W
+│       ├── controller.sv             # 6-state Moore/Mealy FSM controller
+│       └── accelerator.sv            # Top-level AI Accelerator engine
+├── tb/                               # SystemVerilog Testbenches
+│   ├── files.f                       # Manifest filelist for compilation
+│   ├── mac_files.f                   # MAC unit filelist
+│   ├── tb_mac.sv                     # 8-case exhaustive MAC unit testbench
+│   └── tb_accelerator.sv             # 5-suite top-level self-checking testbench
+├── python/                           # Verification & Benchmarks
+│   ├── golden_model.py               # NumPy-based bit-accurate golden reference model
+│   ├── sim_verify.py                 # Cycle-accurate Python simulation & VCD generator
+│   └── benchmark_cpu_vs_accel.py     # Performance benchmark (CPU vs. AI Accelerator)
+├── scripts/                          # Execution shell scripts
+│   ├── compile.sh                    # Compilation script for iverilog
+│   └── run.sh                        # Simulation runner
+└── waves/                            # Waveform dumps (.vcd)
+    ├── tb_accelerator.vcd
+    └── tb_mac.vcd
+```
+
+---
+
+## 🧪 8. Verification Strategy & Test Suites
+
+The project incorporates **4 independent verification layers**:
+
+```
+================================================================================
+                      VERIFICATION COMPLIANCE MATRIX
+================================================================================
+Layer               Target Module          Scope                   Result
+--------------------------------------------------------------------------------
+1. MAC Unit TB      mac.sv                 8 Arithmetic Edge Cases PASS (8/8)
+2. Accelerator TB   ai_accelerator.sv      5 Matrix Multiplications PASS (5/5)
+3. Python Golden    golden_model.py        NumPy Reference Check   PASS (100% Match)
+4. Benchmark Suite  benchmark_cpu_vs_accel Performance & Cycles    PASS (105.6x Speedup)
+================================================================================
+```
+
+### Hardware Testbench Highlights:
+* **Test 1:** Standard $4 \times 4$ Linear Matrix Multiplication.
+* **Test 2:** Signed Negative Operands with ReLU Activation ($\max(0, x)$).
+* **Test 3:** Zero Matrix validation ($A \times 0 = 0$).
+* **Test 4:** Identity Matrix preservation ($A \times I = A$).
+* **Test 5:** Random signed INT8 matrices validated dynamically against the software reference.
+
+---
+
+## 🛠️ 9. How to Compile, Simulate, and Benchmark
+
+### Prerequisites
+* **Icarus Verilog** (`iverilog`, `vvp` v10+ with `-g2012` support)
+* **Python 3.8+** (with `numpy`)
+* **GTKWave** (for waveform viewing)
+
+---
+
+### Option A: Running on Windows (PowerShell)
+
+```powershell
+# 1. Run the Python Performance Benchmark (CPU vs Accelerator)
+python python/benchmark_cpu_vs_accel.py
+
+# 2. Run the NumPy Golden Reference Model
+python python/golden_model.py
+
+# 3. Compile and Run the MAC Unit Testbench (8 Tests)
+iverilog -g2012 -o sim_mac rtl/accelerator/mac.sv tb/tb_mac.sv
+vvp sim_mac
+
+# 4. Compile and Run the Full AI Accelerator Testbench (5 Test Suites)
+iverilog -g2012 -o sim_accelerator rtl/accelerator/accelerator_pkg.sv rtl/accelerator/mac.sv rtl/accelerator/pe.sv rtl/accelerator/systolic_array.sv rtl/accelerator/accumulator.sv rtl/accelerator/relu.sv rtl/accelerator/controller.sv rtl/accelerator/accelerator.sv tb/tb_accelerator.sv
+vvp sim_accelerator
+
+# 5. Open and Inspect Waveforms in GTKWave
+gtkwave waves/tb_accelerator.vcd
+```
+
+---
+
+### Option B: Running on Linux / WSL / macOS (Using Makefile)
+
+```bash
+# Compile and run all hardware simulations
+make test
+
+# Run individual tests
+make test_mac
+make test_accel
+
+# Run Python golden model
+make golden
+
+# View waveforms in GTKWave
+make wave
+make wave_mac
+
+# Clean build artifacts
+make clean
+```
+
+---
+
+## 📊 10. Waveform Timing Inspection
+
+Simulation generates `.vcd` waveform dumps in [`waves/`](file:///p:/project%201/waves/):
+* `waves/tb_accelerator.vcd`
+* `waves/tb_mac.vcd`
+
+### Key Observable Signals:
+* `clk`, `rst_n`: System clock and active-low asynchronous reset.
+* `start`, `busy`, `done`: Hardware execution handshaking.
+* `dut.u_controller.state_reg`: FSM state transitions (`IDLE` $\rightarrow$ `LOAD` $\rightarrow$ `COMPUTE` $\rightarrow$ `ACTIVATE` $\rightarrow$ `WRITEBACK` $\rightarrow$ `DONE`).
+* `dut.u_controller.step_cnt_reg`: Inner-dimension index $k = 0, 1, 2, 3$.
+* `dut.c_matrix`: Final signed INT32 $4 \times 4$ output matrix.
+
+---
+
+## 🚀 11. Project Roadmap
+
+### Milestone 1: Phase 1 (100% Completed)
+- [x] Synthesizable SystemVerilog 4x4 INT8 Systolic / Processing Array.
+- [x] INT32 Accumulation preventing arithmetic overflow.
+- [x] Hardware ReLU Activation unit.
+- [x] 6-state Moore/Mealy Controller FSM.
+- [x] Self-checking SystemVerilog testbenches with 100% pass rate.
+- [x] Python NumPy golden reference model and cycle benchmark suite.
+- [x] Waveform generation and GTKWave timing inspection.
+
+### Milestone 2: Phase 2 (Planned SoC Integration)
+- [ ] **Interconnect Bus Wrapper:** APB / AXI4-Lite slave interface.
+- [ ] **RISC-V CPU Core:** Open-source RV32IM core (Ibex / CV32E40P).
+- [ ] **Shared Memory:** Tightly-Coupled Memory (TCM) subsystem for matrix streaming.
+- [ ] **Firmware Library:** C driver / HAL library for memory-mapped accelerator routines.
+- [ ] **UVM Environment:** Advanced UVM verification with constrained-random stimulus and functional coverage.
+
+---
+
+## 📄 License & Attribution
+Developed as part of the **RISC-V AI Accelerator SoC Project**. Licensed under the [MIT License](LICENSE).

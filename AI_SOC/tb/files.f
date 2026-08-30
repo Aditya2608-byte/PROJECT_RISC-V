@@ -1,0 +1,10 @@
+﻿# SystemVerilog source files and testbenches for Icarus Verilog simulation
+rtl/accelerator/accelerator_pkg.sv
+rtl/accelerator/mac.sv
+rtl/accelerator/pe.sv
+rtl/accelerator/systolic_array.sv
+rtl/accelerator/accumulator.sv
+rtl/accelerator/relu.sv
+rtl/accelerator/controller.sv
+rtl/accelerator/accelerator.sv
+tb/tb_accelerator.sv

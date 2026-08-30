@@ -318,4 +318,4 @@ Simulation generates `.vcd` waveform dumps in [`waves/`](file:///p:/project%201/
 ---
 
 ## 📄 License & Attribution
-Developed as part of the **RISC-V AI Accelerator SoC Project**. Licensed under the [MIT License](LICENSE).
+Developed as part of the **RISC-V AI Accelerator SoC Project**. Licensed under the [MIT License]
